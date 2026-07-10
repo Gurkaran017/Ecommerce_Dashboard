@@ -28,7 +28,7 @@ const MiniSummary = () => {
   const summary = [
     {
       text: "Total Sales this Month",
-      subText: `This month's sales: PKR ${currentMonthSales * 283}`,
+      subText: `This month's sales: INR ${currentMonthSales}`,
       icon: <Wallet className="text-green-600" />,
     },
     {
