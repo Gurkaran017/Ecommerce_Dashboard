@@ -1,66 +1,83 @@
-import React from "react";
 import { useDispatch } from "react-redux";
+import Modal from "../components/ui/Modal";
+import { cn } from "../lib/cn";
+import { formatDate, formatPrice, stockState } from "../lib/format";
 import { toggleViewProductModal } from "../store/slices/extraSlice";
+
+const TONE = {
+  positive: "text-positive",
+  notice: "text-notice",
+  danger: "text-danger",
+};
 
 const ViewProductModal = ({ selectedProduct }) => {
   const dispatch = useDispatch();
-  return (
-    <>
-      <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex justify-center items-center p-4">
-        <div className="bg-white rounded-xl w-full max-w-3xl p-6 overflow-y-auto max-h-[90vh] relative">
-          <button
-            onClick={() => dispatch(toggleViewProductModal())}
-            className="absolute top-4 right-4 text-gray-600 hover:text-red-500 text-xl"
-          >
-            &times;
-          </button>
-          <h2 className="text-2xl font-bold mb-4">{selectedProduct.title}</h2>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Images */}
-            <div className="grid grid-cols-2 gap-3">
-              {selectedProduct.images.map((img, idx) => (
-                <img
-                  key={idx}
-                  src={img?.url}
-                  alt={`Product ${idx}`}
-                  className="w-full h-full object-cover"
-                />
-              ))}
+  if (!selectedProduct) return null;
+
+  const stock = stockState(selectedProduct.stock);
+
+  const facts = [
+    { label: "ID", value: selectedProduct.id },
+    { label: "Category", value: selectedProduct.category },
+    /* formatPrice coerces — the old modal called price.toLocaleString()
+       directly, which throws when the API sends a string. */
+    { label: "Price", value: formatPrice(selectedProduct.price) },
+    { label: "Rating", value: Number(selectedProduct.ratings).toFixed(1) },
+    {
+      label: "Stock",
+      value: (
+        <span className={cn(TONE[stock.tone])}>
+          {selectedProduct.stock} · {stock.label}
+        </span>
+      ),
+    },
+    { label: "Created", value: formatDate(selectedProduct.created_at) },
+  ];
+
+  return (
+    <Modal
+      open
+      onClose={() => dispatch(toggleViewProductModal())}
+      /* The old modal read `selectedProduct.title`; the field is `name`, so the
+         heading was always blank. */
+      title={selectedProduct.name}
+      size="lg"
+    >
+      <div className="grid gap-8 sm:grid-cols-2">
+        <div className="grid grid-cols-2 gap-2">
+          {selectedProduct.images?.map((image, index) => (
+            <div key={image?.url ?? index} className="plate aspect-square">
+              <img
+                src={image?.url}
+                alt=""
+                loading="lazy"
+                className="h-full w-full object-contain p-2"
+              />
             </div>
-            {/* Info */}
-            <div>
-              <p>
-                <strong>ID:</strong> {selectedProduct.id}
-              </p>
-              <p>
-                <strong>Description:</strong> {selectedProduct.description}
-              </p>
-              <p>
-                <strong>Category:</strong> {selectedProduct.category}
-              </p>
-              <p>
-                <strong>Price:</strong> Rs{" "}
-                {selectedProduct.price.toLocaleString()}
-              </p>
-              <p>
-                <strong>Ratings:</strong> ⭐ {selectedProduct.ratings}
-              </p>
-              <p>
-                <strong>Stock:</strong>{" "}
-                {selectedProduct.stock > 0
-                  ? `In Stock (${selectedProduct.stock})`
-                  : "Out of Stock"}
-              </p>
-              <p>
-                <strong>Created At:</strong>{" "}
-                {new Date(selectedProduct.created_at).toLocaleDateString()}
-              </p>
-            </div>
-          </div>
+          ))}
+        </div>
+
+        <div>
+          <dl>
+            {facts.map((fact) => (
+              <div
+                key={fact.label}
+                className="flex items-baseline justify-between gap-6 border-b border-line py-2.5"
+              >
+                <dt className="meta">{fact.label}</dt>
+                <dd className="tnum text-[0.8125rem]">{fact.value}</dd>
+              </div>
+            ))}
+          </dl>
+
+          <p className="meta mb-2 mt-6">Description</p>
+          <p className="text-[0.8125rem] leading-relaxed text-muted">
+            {selectedProduct.description || "No description provided."}
+          </p>
         </div>
       </div>
-    </>
+    </Modal>
   );
 };
 

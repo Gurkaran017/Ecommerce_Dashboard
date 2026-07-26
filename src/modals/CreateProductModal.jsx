@@ -1,161 +1,89 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { createNewProduct } from "../store/slices/productsSlice";
+import Button from "../components/ui/Button";
+import Modal from "../components/ui/Modal";
+import ProductFormFields from "./ProductFormFields";
+import { CATEGORY_OPTIONS } from "../lib/categories";
 import { toggleCreateProductModal } from "../store/slices/extraSlice";
-import { LoaderCircle } from "lucide-react";
+import { createNewProduct } from "../store/slices/productsSlice";
+
+const EMPTY = {
+  name: "",
+  description: "",
+  price: "",
+  category: CATEGORY_OPTIONS[0],
+  stock: "",
+};
 
 const CreateProductModal = () => {
-  const { loading } = useSelector((state) => state.product);
   const dispatch = useDispatch();
+  const { loading } = useSelector((state) => state.product);
 
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    price: "",
-    category: "Electronics",
-    stock: "",
-    images: [],
-  });
+  const [values, setValues] = useState(EMPTY);
+  const [images, setImages] = useState([]);
+  const [errors, setErrors] = useState({});
 
-  const categoryOptions = [
-    "Electronics",
-    "Fashion",
-    "Home & Garden",
-    "Sports",
-    "Books",
-    "Beauty",
-    "Automotive",
-    "Kids & Baby",
-  ];
+  const close = () => dispatch(toggleCreateProductModal());
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  /* The old form had no required attributes and no validation at all — an
+     empty product could be submitted straight to the API. */
+  const validate = () => {
+    const next = {};
+    if (!values.name.trim()) next.name = "Give the product a name.";
+    if (values.price === "" || Number(values.price) < 0)
+      next.price = "Enter a price of zero or more.";
+    if (values.stock === "" || Number(values.stock) < 0)
+      next.stock = "Enter a stock count of zero or more.";
+    setErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    if (!validate()) return;
+
     const data = new FormData();
-    data.append("name", formData.name);
-    data.append("description", formData.description);
-    data.append("price", formData.price);
-    data.append("category", formData.category);
-    data.append("stock", formData.stock);
-
-    for (let i = 0; i < formData.images.length; i++) {
-      data.append("images", formData.images[i]);
-    }
+    data.append("name", values.name);
+    data.append("description", values.description);
+    data.append("price", values.price);
+    data.append("category", values.category);
+    data.append("stock", values.stock);
+    images.forEach((image) => data.append("images", image));
 
     dispatch(createNewProduct(data));
   };
 
   return (
-    <>
-      <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex justify-center items-center p-4">
-        <div className="bg-white rounded-xl w-full max-w-2xl p-6 relative">
-          <button
-            onClick={() => dispatch(toggleCreateProductModal())}
-            className="absolute top-4 right-4 text-gray-600 hover:text-red-500 text-xl"
-          >
-            &times;
-          </button>
-          <h2 className="text-2xl font-bold mb-4 text-center">
-            Create New Product
-          </h2>
+    <Modal open onClose={close} title="New product" size="lg">
+      <form onSubmit={handleSubmit}>
+        <ProductFormFields values={values} onChange={setValues} errors={errors} />
 
-          <form
-            className="grid grid-cols-1 md:grid-cols-2 gap-4"
-            onSubmit={handleSubmit}
-          >
-            <input
-              type="text"
-              placeholder="Title"
-              value={formData.name}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  name: e.target.value,
-                })
-              }
-              className="border px-4 py-2 rounded"
-            />
-            <select
-              className="w-full border p-2 rounded-lg"
-              value={formData.category}
-              onChange={(e) =>
-                setFormData({ ...formData, category: e.target.value })
-              }
-              required
-            >
-              {categoryOptions.map((cat, idx) => (
-                <option key={idx} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              placeholder="Price"
-              value={formData.price}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  price: e.target.value,
-                })
-              }
-              className="border px-4 py-2 rounded"
-            />
-            <input
-              type="number"
-              placeholder="Stock"
-              value={formData.stock}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  stock: e.target.value,
-                })
-              }
-              className="border px-4 py-2 rounded"
-            />
-
+        <div className="mt-6">
+          <span className="meta mb-1.5 block">Images</span>
+          <label className="link cursor-pointer text-[0.8125rem]">
+            {images.length > 0
+              ? `${images.length} selected`
+              : "Choose one or more images"}
             <input
               type="file"
               multiple
               accept="image/*"
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  images: Array.from(e.target.files),
-                })
-              }
-              className="border px-4 py-2 rounded col-span-1 md:col-span-2"
+              onChange={(event) => setImages(Array.from(event.target.files ?? []))}
+              className="sr-only"
             />
-
-            <textarea
-              placeholder="Description"
-              value={formData.description}
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  description: e.target.value,
-                })
-              }
-              className="border px-4 py-2 rounded col-span-1 md:col-span-2"
-              rows={4}
-            />
-
-            <button
-              type="submit"
-              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2 px-6 rounded col-span-1 md:col-span-2"
-            >
-              {loading ? (
-                <>
-                  <LoaderCircle className="w-6 h-6 animate-spin" />
-                  Creating
-                </>
-              ) : (
-                "Add New Product"
-              )}
-            </button>
-          </form>
+          </label>
         </div>
-      </div>
-    </>
+
+        <div className="mt-8 flex justify-end gap-3">
+          <Button variant="quiet" onClick={close} type="button">
+            Cancel
+          </Button>
+          <Button type="submit" loading={loading}>
+            Create product
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 };
 
