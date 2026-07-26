@@ -1,10 +1,13 @@
 import { createSlice } from "@reduxjs/toolkit";
-import { axiosInstance } from "../../lib/axios";
 import { toast } from "react-toastify";
+import { axiosInstance } from "../../lib/axios";
 import {
   toggleCreateProductModal,
   toggleUpdateProductModal,
 } from "./extraSlice";
+
+const messageFrom = (error, fallback) =>
+  error?.response?.data?.message || fallback;
 
 const productSlice = createSlice({
   name: "product",
@@ -20,7 +23,8 @@ const productSlice = createSlice({
     },
     createProductSuccess(state, action) {
       state.loading = false;
-      state.products = [action.payload, ...state.products];
+      if (action.payload) state.products = [action.payload, ...state.products];
+      state.totalProducts += 1;
     },
     createProductFailed(state) {
       state.loading = false;
@@ -30,8 +34,8 @@ const productSlice = createSlice({
     },
     getAllProductsSuccess(state, action) {
       state.fetchingProducts = false;
-      state.products = action.payload.products;
-      state.totalProducts = action.payload.totalProducts;
+      state.products = action.payload.products ?? [];
+      state.totalProducts = action.payload.totalProducts ?? 0;
     },
     getAllProductsFailed(state) {
       state.fetchingProducts = false;
@@ -41,6 +45,7 @@ const productSlice = createSlice({
     },
     updateProductSuccess(state, action) {
       state.loading = false;
+      if (!action.payload) return;
       state.products = state.products.map((product) =>
         product.id === action.payload.id ? action.payload : product
       );
@@ -64,69 +69,58 @@ const productSlice = createSlice({
   },
 });
 
+const actions = productSlice.actions;
+
 export const createNewProduct = (data) => async (dispatch) => {
-  dispatch(productSlice.actions.createProductRequest());
-  await axiosInstance
-    .post("/product/admin/create", data)
-    .then((res) => {
-      dispatch(productSlice.actions.createProductSuccess(res.data.product));
-      toast.success(res.data.message || "Product created successfully.");
-      dispatch(toggleCreateProductModal());
-    })
-    .catch((error) => {
-      dispatch(productSlice.actions.createProductFailed());
-      toast.error(error.response?.data?.message || "Failed to create product.");
-    });
+  dispatch(actions.createProductRequest());
+  try {
+    const res = await axiosInstance.post("/product/admin/create", data);
+    dispatch(actions.createProductSuccess(res.data.product));
+    toast.success(res.data.message || "Product created.");
+    dispatch(toggleCreateProductModal());
+  } catch (error) {
+    dispatch(actions.createProductFailed());
+    toast.error(messageFrom(error, "Could not create the product."));
+  }
 };
 
 export const fetchAllProducts = (page) => async (dispatch) => {
-  dispatch(productSlice.actions.getAllProductsRequest());
-  await axiosInstance
-    .get(`/product?page=${page || 1}`)
-    .then((res) => {
-      dispatch(productSlice.actions.getAllProductsSuccess(res.data));
-    })
-    .catch((error) => {
-      dispatch(productSlice.actions.getAllProductsFailed());
-    });
+  dispatch(actions.getAllProductsRequest());
+  try {
+    const res = await axiosInstance.get(`/product?page=${page || 1}`);
+    dispatch(actions.getAllProductsSuccess(res.data));
+  } catch {
+    dispatch(actions.getAllProductsFailed());
+  }
 };
 
 export const updateProduct = (data, id) => async (dispatch) => {
-  dispatch(productSlice.actions.updateProductRequest());
-  await axiosInstance
-    .put(`/product/admin/update/${id}`, data)
-    .then((res) => {
-      dispatch(
-        productSlice.actions.updateProductSuccess(res.data.updatedProduct)
-      );
-      toast.success(res.data.message || "Product updated successfully.");
-      dispatch(toggleUpdateProductModal());
-    })
-    .catch((error) => {
-      dispatch(productSlice.actions.updateProductFailed());
-      toast.error(error.response?.data?.message || "Failed to update product.");
-    });
+  dispatch(actions.updateProductRequest());
+  try {
+    const res = await axiosInstance.put(`/product/admin/update/${id}`, data);
+    dispatch(actions.updateProductSuccess(res.data.updatedProduct));
+    toast.success(res.data.message || "Product updated.");
+    dispatch(toggleUpdateProductModal());
+  } catch (error) {
+    dispatch(actions.updateProductFailed());
+    toast.error(messageFrom(error, "Could not update the product."));
+  }
 };
 
 export const deleteProduct = (id, page) => async (dispatch, getState) => {
-  dispatch(productSlice.actions.deleteProductRequest());
-  await axiosInstance
-    .delete(`/product/admin/delete/${id}`)
-    .then((res) => {
-      dispatch(productSlice.actions.deleteProductSuccess(id));
-      toast.success(res.data.message || "Product deleted successfully.");
+  dispatch(actions.deleteProductRequest());
+  try {
+    const res = await axiosInstance.delete(`/product/admin/delete/${id}`);
+    dispatch(actions.deleteProductSuccess(id));
+    toast.success(res.data.message || "Product deleted.");
 
-      const state = getState();
-      const updatedTotal = state.product.totalProducts;
-      const updatedMaxPage = Math.ceil(updatedTotal / 10) || 1;
-
-      const validPage = Math.min(page, updatedMaxPage);
-      dispatch(fetchAllProducts(validPage));
-    })
-    .catch((error) => {
-      dispatch(productSlice.actions.deleteProductFailed());
-      toast.error(error.response?.data?.message || "Failed to delete product.");
-    });
+    const { totalProducts } = getState().product;
+    const maxPage = Math.ceil(totalProducts / 10) || 1;
+    dispatch(fetchAllProducts(Math.min(page, maxPage)));
+  } catch (error) {
+    dispatch(actions.deleteProductFailed());
+    toast.error(messageFrom(error, "Could not delete the product."));
+  }
 };
 
 export default productSlice.reducer;

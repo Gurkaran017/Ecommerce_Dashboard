@@ -1,13 +1,16 @@
 import { createSlice } from "@reduxjs/toolkit";
-import { axiosInstance } from "../../lib/axios";
 import { toast } from "react-toastify";
+import { axiosInstance } from "../../lib/axios";
+
+const messageFrom = (error, fallback) =>
+  error?.response?.data?.message || fallback;
 
 export const adminSlice = createSlice({
   name: "admin",
   initialState: {
     loading: false,
-    totalUsers: 0,
     users: [],
+    totalUsers: 0,
     totalRevenueAllTime: 0,
     todayRevenue: 0,
     yesterdayRevenue: 0,
@@ -26,8 +29,8 @@ export const adminSlice = createSlice({
     },
     getAllUsersSuccess(state, action) {
       state.loading = false;
-      state.users = action.payload.users;
-      state.totalUsers = action.payload.totalUsers;
+      state.users = action.payload.users ?? [];
+      state.totalUsers = action.payload.totalUsers ?? 0;
     },
     getAllUsersFailed(state) {
       state.loading = false;
@@ -44,22 +47,25 @@ export const adminSlice = createSlice({
     deleteUserFailed(state) {
       state.loading = false;
     },
-    getStatsRequest(state, action) {
+    getStatsRequest(state) {
       state.loading = true;
     },
     getStatsSuccess(state, action) {
+      const payload = action.payload ?? {};
       state.loading = false;
-      state.totalRevenueAllTime = action.payload.totalRevenueAllTime;
-      state.todayRevenue = action.payload.todayRevenue;
-      state.yesterdayRevenue = action.payload.yesterdayRevenue;
-      state.totalUsersCount = action.payload.totalUsersCount;
-      state.monthlySales = action.payload.monthlySales;
-      state.orderStatusCounts = action.payload.orderStatusCounts;
-      state.topSellingProducts = action.payload.topSellingProducts;
-      state.lowStockProducts = action.payload.lowStockProducts?.length;
-      state.revenueGrowth = action.payload.revenueGrowth;
-      state.newUsersThisMonth = action.payload.newUsersThisMonth;
-      state.currentMonthSales = action.payload.currentMonthSales;
+      state.totalRevenueAllTime = payload.totalRevenueAllTime ?? 0;
+      state.todayRevenue = payload.todayRevenue ?? 0;
+      state.yesterdayRevenue = payload.yesterdayRevenue ?? 0;
+      state.totalUsersCount = payload.totalUsersCount ?? 0;
+      state.monthlySales = payload.monthlySales ?? [];
+      state.orderStatusCounts = payload.orderStatusCounts ?? {};
+      state.topSellingProducts = payload.topSellingProducts ?? [];
+      state.lowStockProducts = payload.lowStockProducts?.length ?? 0;
+      /* Arrives pre-formatted, e.g. "+12.4%". Default to empty, never undefined —
+         the summary used to call .includes() straight on it. */
+      state.revenueGrowth = payload.revenueGrowth ?? "";
+      state.newUsersThisMonth = payload.newUsersThisMonth ?? 0;
+      state.currentMonthSales = payload.currentMonthSales ?? 0;
     },
     getStatsFailed(state) {
       state.loading = false;
@@ -67,48 +73,42 @@ export const adminSlice = createSlice({
   },
 });
 
+const actions = adminSlice.actions;
+
 export const fetchAllUsers = (page) => async (dispatch) => {
-  dispatch(adminSlice.actions.getAllUsersRequest());
-  await axiosInstance
-    .get(`/admin/getallusers?page=${page || 1}`)
-    .then((res) => {
-      dispatch(adminSlice.actions.getAllUsersSuccess(res.data));
-    })
-    .catch((error) => {
-      dispatch(adminSlice.actions.getAllUsersFailed());
-    });
+  dispatch(actions.getAllUsersRequest());
+  try {
+    const res = await axiosInstance.get(`/admin/getallusers?page=${page || 1}`);
+    dispatch(actions.getAllUsersSuccess(res.data));
+  } catch {
+    dispatch(actions.getAllUsersFailed());
+  }
 };
 
 export const deleteUser = (id, page) => async (dispatch, getState) => {
-  dispatch(adminSlice.actions.deleteUserRequest());
-  await axiosInstance
-    .delete(`/admin/delete/${id}`)
-    .then((res) => {
-      dispatch(adminSlice.actions.deleteUserSuccess(id));
-      toast.success(res.data.message || "User deleted successfully.");
-      const state = getState();
-      const updatedTotal = state.admin.totalUsers;
-      const updatedMaxPage = Math.ceil(updatedTotal / 10) || 1;
+  dispatch(actions.deleteUserRequest());
+  try {
+    const res = await axiosInstance.delete(`/admin/delete/${id}`);
+    dispatch(actions.deleteUserSuccess(id));
+    toast.success(res.data.message || "User deleted.");
 
-      const validPage = Math.min(page, updatedMaxPage);
-      dispatch(fetchAllUsers(validPage));
-    })
-    .catch((error) => {
-      dispatch(adminSlice.actions.deleteUserFailed());
-      toast.error(error.response?.data?.message || "Failed to delete user.");
-    });
+    const { totalUsers } = getState().admin;
+    const maxPage = Math.ceil(totalUsers / 10) || 1;
+    dispatch(fetchAllUsers(Math.min(page, maxPage)));
+  } catch (error) {
+    dispatch(actions.deleteUserFailed());
+    toast.error(messageFrom(error, "Could not delete the user."));
+  }
 };
 
 export const getDashboardStats = () => async (dispatch) => {
-  dispatch(adminSlice.actions.getStatsRequest());
-  await axiosInstance
-    .get(`/admin/fetch/dashboard-stats`)
-    .then((res) => {
-      dispatch(adminSlice.actions.getStatsSuccess(res.data));
-    })
-    .catch((error) => {
-      dispatch(adminSlice.actions.getStatsFailed());
-    });
+  dispatch(actions.getStatsRequest());
+  try {
+    const res = await axiosInstance.get("/admin/fetch/dashboard-stats");
+    dispatch(actions.getStatsSuccess(res.data));
+  } catch {
+    dispatch(actions.getStatsFailed());
+  }
 };
 
 export default adminSlice.reducer;

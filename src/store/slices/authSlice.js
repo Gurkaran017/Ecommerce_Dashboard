@@ -1,12 +1,20 @@
 import { createSlice } from "@reduxjs/toolkit";
-import axios from "axios";
-import { axiosInstance } from "../../lib/axios";
 import { toast } from "react-toastify";
+import { axiosInstance } from "../../lib/axios";
+
+/* Network failures have no `error.response`, so every handler reads it
+   defensively — the previous version threw a TypeError inside its own catch. */
+const messageFrom = (error, fallback) =>
+  error?.response?.data?.message || fallback;
 
 const authSlice = createSlice({
   name: "auth",
   initialState: {
     loading: false,
+    /* Distinct from `loading`. The session check is in flight on first paint,
+       and without this the app redirected to /login before it resolved —
+       every refresh flashed the login screen. */
+    isCheckingAuth: true,
     user: null,
     isAuthenticated: false,
   },
@@ -23,22 +31,22 @@ const authSlice = createSlice({
       state.loading = false;
     },
     getUserRequest(state) {
-      state.loading = true;
+      state.isCheckingAuth = true;
     },
     getUserSuccess(state, action) {
-      state.loading = false;
+      state.isCheckingAuth = false;
       state.user = action.payload;
       state.isAuthenticated = true;
     },
     getUserFailed(state) {
-      state.loading = false;
+      state.isCheckingAuth = false;
       state.user = null;
       state.isAuthenticated = false;
     },
     logoutRequest(state) {
       state.loading = true;
     },
-    logoutSuccess(state, action) {
+    logoutSuccess(state) {
       state.loading = false;
       state.user = null;
       state.isAuthenticated = false;
@@ -49,10 +57,7 @@ const authSlice = createSlice({
     forgotPasswordRequest(state) {
       state.loading = true;
     },
-    forgotPasswordSuccess(state, action) {
-      state.loading = false;
-    },
-    forgotPasswordFailed(state) {
+    forgotPasswordSettled(state) {
       state.loading = false;
     },
     resetPasswordRequest(state) {
@@ -79,124 +84,109 @@ const authSlice = createSlice({
     updatePasswordRequest(state) {
       state.loading = true;
     },
-    updatePasswordSuccess(state, action) {
+    updatePasswordSettled(state) {
       state.loading = false;
-    },
-    updatePasswordFailed(state) {
-      state.loading = false;
-    },
-    resetAuthSlice(state) {
-      state.loading = false;
-      state.user = state.user;
-      state.isAuthenticated = state.isAuthenticated;
     },
   },
 });
 
+const actions = authSlice.actions;
+
 export const login = (data) => async (dispatch) => {
-  dispatch(authSlice.actions.loginRequest());
+  dispatch(actions.loginRequest());
   try {
-    await axiosInstance.post("/auth/login", data).then((res) => {
-      if (res.data.user.role === "Admin") {
-        dispatch(authSlice.actions.loginSuccess(res.data.user));
-        toast.success(res.data.message);
-      } else {
-        dispatch(authSlice.actions.loginFailed());
-        toast.error(res.data.message);
-      }
-    });
+    const res = await axiosInstance.post("/auth/login", data);
+    if (res.data.user?.role === "Admin") {
+      dispatch(actions.loginSuccess(res.data.user));
+      toast.success(res.data.message || "Signed in.");
+    } else {
+      dispatch(actions.loginFailed());
+      toast.error("This account does not have admin access.");
+    }
   } catch (error) {
-    dispatch(authSlice.actions.loginFailed());
-    toast.error(error.response.data.message || "Login failed.");
+    dispatch(actions.loginFailed());
+    toast.error(messageFrom(error, "Sign in failed."));
   }
 };
 
 export const getUser = () => async (dispatch) => {
-  dispatch(authSlice.actions.loginRequest());
+  dispatch(actions.getUserRequest());
   try {
-    await axiosInstance.get("/auth/me").then((res) => {
-      dispatch(authSlice.actions.getUserSuccess(res.data.user));
-    });
-  } catch (error) {
-    dispatch(authSlice.actions.getUserFailed());
+    const res = await axiosInstance.get("/auth/me");
+    dispatch(actions.getUserSuccess(res.data.user));
+  } catch {
+    dispatch(actions.getUserFailed());
   }
 };
 
 export const logout = () => async (dispatch) => {
-  dispatch(authSlice.actions.logoutRequest());
+  dispatch(actions.logoutRequest());
   try {
-    await axiosInstance.get("/auth/logout").then((res) => {
-      dispatch(authSlice.actions.logoutSuccess());
-      toast.success(res.data.message);
-      dispatch(authSlice.actions.resetAuthSlice());
-    });
+    const res = await axiosInstance.get("/auth/logout");
+    dispatch(actions.logoutSuccess());
+    toast.success(res.data.message || "Signed out.");
   } catch (error) {
-    dispatch(authSlice.actions.getUserFailed());
-    toast.error(error.response.data.message || "Logout failed.");
-    dispatch(authSlice.actions.resetAuthSlice());
+    dispatch(actions.logoutFailed());
+    toast.error(messageFrom(error, "Sign out failed."));
   }
 };
 
 export const forgotPassword = (email) => async (dispatch) => {
-  dispatch(authSlice.actions.forgotPasswordRequest());
+  dispatch(actions.forgotPasswordRequest());
   try {
-    await axiosInstance
-      .post("/auth/password/forgot?frontendUrl=http://localhost:5174", email)
-      .then((res) => {
-        dispatch(authSlice.actions.forgotPasswordSuccess());
-        toast.success(res.data.message);
-      });
-  } catch (error) {
-    dispatch(authSlice.actions.forgotPasswordFailed());
-    toast.error(
-      error.response.data.message || "Cannot request for reset password."
+    /* The reset link must point back at wherever this app is actually served
+       from, not a hardcoded dev port. */
+    const res = await axiosInstance.post(
+      `/auth/password/forgot?frontendUrl=${encodeURIComponent(
+        window.location.origin
+      )}`,
+      email
     );
+    toast.success(res.data.message || "Reset link sent.");
+  } catch (error) {
+    toast.error(messageFrom(error, "Could not send the reset link."));
+  } finally {
+    dispatch(actions.forgotPasswordSettled());
   }
 };
 
 export const resetPassword = (newData, token) => async (dispatch) => {
-  dispatch(authSlice.actions.resetPasswordRequest());
+  dispatch(actions.resetPasswordRequest());
   try {
-    await axiosInstance
-      .put(`/auth/password/reset/${token}`, newData)
-      .then((res) => {
-        dispatch(authSlice.actions.resetPasswordSuccess(res.data.user));
-        toast.success(res.data.message);
-      });
+    const res = await axiosInstance.put(
+      `/auth/password/reset/${token}`,
+      newData
+    );
+    dispatch(actions.resetPasswordSuccess(res.data.user));
+    toast.success(res.data.message || "Password updated.");
   } catch (error) {
-    dispatch(authSlice.actions.resetPasswordFailed());
-    toast.error(error.response.data.message || "Failed to reset password.");
+    dispatch(actions.resetPasswordFailed());
+    toast.error(messageFrom(error, "Could not reset the password."));
   }
 };
 
 export const updateAdminProfile = (data) => async (dispatch) => {
-  dispatch(authSlice.actions.updateProfileRequest());
+  dispatch(actions.updateProfileRequest());
   try {
-    await axiosInstance.put(`/auth/profile/update`, data).then((res) => {
-      dispatch(authSlice.actions.updateProfileSuccess(res.data.user));
-      toast.success(res.data.message);
-    });
+    const res = await axiosInstance.put("/auth/profile/update", data);
+    dispatch(actions.updateProfileSuccess(res.data.user));
+    toast.success(res.data.message || "Profile updated.");
   } catch (error) {
-    dispatch(authSlice.actions.updateProfileFailed());
-    toast.error(error.response.data.message || "Failed to update profile.");
+    dispatch(actions.updateProfileFailed());
+    toast.error(messageFrom(error, "Could not update the profile."));
   }
 };
 
 export const updateAdminPassword = (data) => async (dispatch) => {
-  dispatch(authSlice.actions.updatePasswordRequest());
+  dispatch(actions.updatePasswordRequest());
   try {
-    await axiosInstance.put(`/auth/password/update`, data).then((res) => {
-      dispatch(authSlice.actions.updatePasswordSuccess());
-      toast.success(res.data.message);
-    });
+    const res = await axiosInstance.put("/auth/password/update", data);
+    toast.success(res.data.message || "Password updated.");
   } catch (error) {
-    dispatch(authSlice.actions.updatePasswordFailed());
-    toast.error(error.response.data.message || "Failed to update password.");
+    toast.error(messageFrom(error, "Could not update the password."));
+  } finally {
+    dispatch(actions.updatePasswordSettled());
   }
-};
-
-export const resetAuthSlice = () => (dispatch) => {
-  dispatch(authSlice.actions.resetAuthSlice());
 };
 
 export default authSlice.reducer;
