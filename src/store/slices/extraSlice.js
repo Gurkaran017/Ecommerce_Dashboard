@@ -1,39 +1,41 @@
 import { createSlice } from "@reduxjs/toolkit";
 
+/* `openedComponent` is gone: the router owns which section is showing, so the
+   URL is now the single source of truth for navigation. What remains here is
+   genuinely ephemeral UI state. */
 const extraSlice = createSlice({
   name: "extra",
   initialState: {
-    openedComponent: "Dashboard",
     isNavbarOpened: false,
     isViewProductModalOpened: false,
     isCreateProductModalOpened: false,
     isUpdateProductModalOpened: false,
   },
   reducers: {
-    toggleComponent: (state, action) => {
-      state.openedComponent = action.payload;
-    },
-    toggleNavbar: (state) => {
+    toggleNavbar(state) {
       state.isNavbarOpened = !state.isNavbarOpened;
     },
-    toggleCreateProductModal: (state) => {
+    closeNavbar(state) {
+      state.isNavbarOpened = false;
+    },
+    toggleCreateProductModal(state) {
       state.isCreateProductModalOpened = !state.isCreateProductModalOpened;
     },
-    toggleViewProductModal: (state) => {
+    toggleViewProductModal(state) {
       state.isViewProductModalOpened = !state.isViewProductModalOpened;
     },
-    toggleUpdateProductModal: (state, action) => {
+    toggleUpdateProductModal(state) {
       state.isUpdateProductModalOpened = !state.isUpdateProductModalOpened;
     },
   },
 });
 
 export const {
-  toggleComponent,
-  toggleCreateProductModal,
   toggleNavbar,
-  toggleUpdateProductModal,
+  closeNavbar,
+  toggleCreateProductModal,
   toggleViewProductModal,
+  toggleUpdateProductModal,
 } = extraSlice.actions;
 
 export default extraSlice.reducer;
