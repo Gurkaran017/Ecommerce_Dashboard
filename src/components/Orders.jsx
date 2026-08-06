@@ -170,7 +170,7 @@ const Orders = () => {
                                   <p>
                                     <strong>Qty:</strong> {item.quantity} |{" "}
                                     <strong>Price:</strong>${item.price} |
-                                    <strong>Total Price:</strong> $
+                                    <strong>Total Price:</strong> ₹
                                     {item.quantity * item.price}
                                   </p>
                                 </div>
