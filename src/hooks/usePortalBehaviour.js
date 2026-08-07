@@ -10,11 +10,35 @@ const FOCUSABLE = [
 ].join(",");
 
 /**
+ * Prefer the first field over chrome like the close button so typing
+ * starts immediately and Space doesn't activate Close.
+ */
+const firstInteractive = (container) => {
+  if (!container) return null;
+  const focusables = Array.from(container.querySelectorAll(FOCUSABLE)).filter(
+    (node) => node.offsetParent !== null
+  );
+  return (
+    focusables.find((node) => {
+      const tag = node.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    }) ??
+    focusables[0] ??
+    container
+  );
+};
+
+/**
  * Everything a dialog or drawer owes the user: locked background scroll,
  * trapped focus, Esc to close, and focus returned where it came from.
+ *
+ * onClose is kept in a ref so parent re-renders (e.g. typing in a form)
+ * do not re-run this effect and steal focus back to the first button.
  */
 export const usePortalBehaviour = ({ open, onClose }) => {
   const containerRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return undefined;
@@ -29,12 +53,12 @@ export const usePortalBehaviour = ({ open, onClose }) => {
     if (scrollbarWidth > 0) body.style.paddingRight = `${scrollbarWidth}px`;
 
     const container = containerRef.current;
-    (container?.querySelector(FOCUSABLE) ?? container)?.focus?.();
+    firstInteractive(container)?.focus?.();
 
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onClose?.();
+        onCloseRef.current?.();
         return;
       }
 
@@ -65,7 +89,7 @@ export const usePortalBehaviour = ({ open, onClose }) => {
       body.style.paddingRight = previousPadding;
       previouslyFocused?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
   return containerRef;
 };

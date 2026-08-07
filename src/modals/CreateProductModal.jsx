@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Button from "../components/ui/Button";
+import ImagePicker from "../components/ui/ImagePicker";
 import Modal from "../components/ui/Modal";
 import ProductFormFields from "./ProductFormFields";
 import { CATEGORY_OPTIONS } from "../lib/categories";
@@ -59,19 +60,7 @@ const CreateProductModal = () => {
         <ProductFormFields values={values} onChange={setValues} errors={errors} />
 
         <div className="mt-6">
-          <span className="meta mb-1.5 block">Images</span>
-          <label className="link cursor-pointer text-[0.8125rem]">
-            {images.length > 0
-              ? `${images.length} selected`
-              : "Choose one or more images"}
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              onChange={(event) => setImages(Array.from(event.target.files ?? []))}
-              className="sr-only"
-            />
-          </label>
+          <ImagePicker files={images} onChange={setImages} />
         </div>
 
         <div className="mt-8 flex justify-end gap-3">
